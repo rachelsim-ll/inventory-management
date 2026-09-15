@@ -74,6 +74,66 @@
           </table>
         </div>
       </div>
+
+      <div v-if="!restockingLoading && !restockingError && restockingOrders.length === 0" class="card">
+        <div class="card-header">
+          <h3 class="card-title">{{ t('orders.submittedOrders') }} (0)</h3>
+        </div>
+        <div style="padding: 2rem; text-align: center; color: #64748b;">
+          {{ t('orders.noSubmittedOrders') }}
+        </div>
+      </div>
+
+      <div v-else-if="restockingLoading" class="loading">{{ t('common.loading') }}</div>
+      <div v-else-if="restockingError" class="error">{{ restockingError }}</div>
+      <div v-else class="card">
+        <div class="card-header">
+          <h3 class="card-title">{{ t('orders.submittedOrders') }} ({{ restockingOrders.length }})</h3>
+        </div>
+        <div class="table-container">
+          <table class="orders-table">
+            <thead>
+              <tr>
+                <th class="col-order-number">{{ t('orders.table.orderNumber') }}</th>
+                <th class="col-items">{{ t('orders.table.items') }}</th>
+                <th class="col-status">{{ t('orders.table.status') }}</th>
+                <th class="col-date">{{ t('orders.table.orderDate') }}</th>
+                <th class="col-date">{{ t('orders.table.expectedDelivery') }}</th>
+                <th class="col-value">{{ t('orders.table.totalValue') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in restockingOrders" :key="order.id">
+                <td class="col-order-number"><strong>{{ order.order_number }}</strong></td>
+                <td class="col-items">
+                  <details class="items-details">
+                    <summary class="items-summary">
+                      {{ t('orders.itemsCount', { count: order.items.length }) }}
+                    </summary>
+                    <div class="items-dropdown">
+                      <div v-for="(item, idx) in order.items" :key="idx" class="item-entry">
+                        <span class="item-name">{{ item.item_name }}</span>
+                        <span class="item-meta">{{ t('orders.quantity') }}: {{ item.quantity }} @ {{ currencySymbol }}{{ item.unit_cost }}</span>
+                      </div>
+                    </div>
+                  </details>
+                </td>
+                <td class="col-status">
+                  <span :class="['badge', getOrderStatusClass(order.status)]">
+                    {{ t(`status.${order.status.toLowerCase()}`) }}
+                  </span>
+                </td>
+                <td class="col-date">{{ formatDate(order.order_date) }}</td>
+                <td class="col-date">
+                  {{ formatDate(order.expected_delivery) }}<br>
+                  <span style="color: #64748b; font-size: 0.813rem;">({{ order.lead_time_days }} {{ t('orders.table.leadTime').toLowerCase() }})</span>
+                </td>
+                <td class="col-value"><strong>{{ currencySymbol }}{{ order.total_cost.toLocaleString() }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -105,6 +165,10 @@ export default {
       getCurrentFilters
     } = useFilters()
 
+    const restockingOrders = ref([])
+    const restockingLoading = ref(false)
+    const restockingError = ref(null)
+
     const loadOrders = async () => {
       try {
         loading.value = true
@@ -121,6 +185,18 @@ export default {
         error.value = 'Failed to load orders: ' + err.message
       } finally {
         loading.value = false
+      }
+    }
+
+    const loadRestockingOrders = async () => {
+      try {
+        restockingLoading.value = true
+        restockingError.value = null
+        restockingOrders.value = await api.getRestockingOrders()
+      } catch (err) {
+        restockingError.value = 'Failed to load restocking orders: ' + err.message
+      } finally {
+        restockingLoading.value = false
       }
     }
 
@@ -153,13 +229,19 @@ export default {
       })
     }
 
-    onMounted(loadOrders)
+    onMounted(() => {
+      loadOrders()
+      loadRestockingOrders()
+    })
 
     return {
       t,
       loading,
       error,
       orders,
+      restockingOrders,
+      restockingLoading,
+      restockingError,
       getOrdersByStatus,
       getOrderStatusClass,
       formatDate,
